@@ -1,12 +1,13 @@
 use std::collections::HashMap;
-use std::io::{self, BufRead, Read};
+use std::fs::File;
+use std::io::{self, BufRead, Read, Write};
 use std::path::Path;
-use std::thread;
+use std::thread::{self, available_parallelism};
 
 use crate::fnv::FNV1aBuilder;
 use crate::heap::Heap;
 use crate::node::Node;
-use crate::io::IO;
+use crate::io::{IO};
 
 use itertools::Itertools;
 
@@ -32,56 +33,68 @@ impl Huffman {
         heap.remove().unwrap()
     }
 
-    fn create_freq_file(file_path: &Path, freq_path: &Path) {
-        let file = IO::create_file(file_path).unwrap();
-        let mut reader = io::BufReader::new(file);
+    fn create_freq_file(file_path: &Path, freq_path: &Path) -> Vec<Node> {
+        let freq_file = IO::create_file(freq_path).unwrap();
+        let mut file = File::open(file_path).unwrap();
+        let char_count = Self::create_freq_table(&file);
 
-        let mut result: HashMap<char, usize, _> = HashMap::with_hasher(FNV1aBuilder);
+        let mut node_vec: Vec<Node> = Vec::with_capacity(char_count.len());
 
-        // let worker_threads: usize = 4;
-        // let mut handles = Vec::new();
+        for (char, count) in char_count {
+            node_vec.push(Node::new(char, count));
+            writeln!(&file, "{}:{}", char, count);
+        }
 
-        for page in &reader.lines().chunks(4000) {
+        node_vec
+    }
+
+    fn create_freq_table(file: &File) -> HashMap<char, usize, FNV1aBuilder> {
+        let worker_count: usize = available_parallelism().unwrap().get();
+        let lines_each = worker_count * 1000;
+
+        let reader = io::BufReader::with_capacity(10485760, file);
+        let mut result: HashMap<char, usize, _> = HashMap::with_capacity_and_hasher(512, FNV1aBuilder);
+
+        for page in &reader.lines().chunks(lines_each) {
             let string: Vec<_> = page.filter_map(Result::ok).collect();
 
             match string.len() {
-                0 => HashMap::with_hasher(FNV1aBuilder),
-                n if n < 4000 => Self::count_chars(string),
-                _ => {
-
-                }
-
-            }
-
-            // let string: Vec<_> = page.filter_map(Result::ok).collect();
-            
-            // for chunk in string.chunks(worker_threads) {
-            //     let string = chunk.join("");
-                
-            //     let handle = thread::spawn(move || {
-            //         let mut map: HashMap<char, usize, _> = HashMap::with_hasher(FNV1aBuilder);
-            //         for c in string.chars() {
-            //             *map.entry(c).or_default() += 1;
-            //         }
-
-            //         map
-            //     });
-
-            //     handles.push(handle)
-            // }
+                0 => (),
+                l if l < 4000 => {
+                    for line in string {
+                        for c in line.chars() {
+                            *result.entry(c).or_default() += 1;
+                        }
+                    }
+                },
+                l => thread::scope(|s| {
+                    let mut handles = Vec::with_capacity(worker_count);
+                    for chunk in string.chunks(l / worker_count + 1) {
+                        handles.push(s.spawn(|| count_chars(chunk)))
+                    }
+                    for handle in handles {
+                        let map = handle.join().unwrap();
+                        for (key, value) in map {
+                            *result.entry(key).or_default() += value;
+                        }
+                    }
+                })
+            };
         }
 
-        // for handle in handles {
-        //     let map = handle.join().unwrap();
-        //     for (key, value) in map {
-        //         *result.entry(key).or_default() += value;
-        //     }
-        // }
-        
-        // *map.entry(key)
+        result
     }
 
-    pub fn count_chars(input: Vec<String>) -> HashMap<char, usize, FNV1aBuilder> {
 
+
+}
+
+pub fn count_chars(input: &[String]) -> HashMap<char, usize, FNV1aBuilder> {
+    let mut map = HashMap::with_capacity_and_hasher(512, FNV1aBuilder);
+    for line in input {
+        for c in line.chars() {
+            *map.entry(c).or_default() += 1;
+        }
     }
+    map
 }

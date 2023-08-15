@@ -29,6 +29,10 @@ impl Node {
     pub fn get_freq(&self) -> usize {
         self.freq
     }
+
+    pub fn get_char(&self) -> Option<char> {
+        self.char
+    }
 }
 
 impl PartialEq for Node {

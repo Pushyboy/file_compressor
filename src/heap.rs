@@ -2,6 +2,7 @@ pub struct Heap<T: PartialOrd> {
     items: Vec<T>,
 }
 
+// All of these methods have a problem if the number is nonnegative
 impl<T: PartialOrd> Heap<T> {
     pub fn new(items: Vec<T>) -> Self {
         let mut heap = Self {items};
@@ -10,6 +11,7 @@ impl<T: PartialOrd> Heap<T> {
     }
 
     fn heapify(&mut self) {
+        // Might break if there are 0 elements?
         for i in (0..=(self.size()/2 - 1)).rev() {
             self.sift_down(i)
         }

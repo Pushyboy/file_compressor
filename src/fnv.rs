@@ -1,4 +1,4 @@
-use std::{hash::{Hasher, BuildHasher}};
+use std::{hash::{Hasher, BuildHasher}, ops::BitXor};
 
 const FNV_PRIME: u32 = 0x01000193;
 const FNV_OFFSET_BASIS: u32 = 0x811c9dc5;
@@ -20,8 +20,7 @@ impl Hasher for FNV1a {
 
     fn write(&mut self, bytes: &[u8]) {
         for b in bytes {
-            self.hash ^= *b as u32;
-            self.hash = self.hash.wrapping_mul(FNV_PRIME);
+            self.hash = self.hash.bitxor(*b as u32).wrapping_mul(FNV_PRIME);
         }
     }
 }
